@@ -1,0 +1,14 @@
+{
+  "name": "safar",
+  "private": true,
+  "type": "module",
+  "description": "Gig worker grievance intake over WhatsApp, for manual filing into Karnataka's IPGRS.",
+  "scripts": {
+    "export": "node scripts/export-grievances.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5",
+    "xlsx": "^0.18.5"
+  }
+}
