@@ -128,11 +128,37 @@ export async function downloadMedia(
 // Verifies the X-Hub-Signature-256 header Meta sends on every webhook
 // POST, so a request that didn't come from Meta gets rejected before
 // it touches the database. Needs META_APP_SECRET set.
+//
+// Meta signs an escaped-unicode version of the payload (e.g. "ä" is
+// signed as "\\u00e4"). Plain test payloads are pure ASCII and match
+// either way; real messages with emoji or non-English names may not.
+// So we check the raw body first, then the escaped form.
+async function hmacHex(secret: string, data: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  return Array.from(new Uint8Array(mac))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function escapeNonAscii(s: string): string {
+  return s.replace(
+    /[\u0080-\uffff]/g,
+    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
+}
+
 export async function verifySignature(
   rawBody: string,
   signatureHeader: string | null,
 ): Promise<boolean> {
-  const appSecret = Deno.env.get("META_APP_SECRET");
+  const appSecret = Deno.env.get("META_APP_SECRET")?.trim();
   if (!appSecret) {
     console.warn(
       "META_APP_SECRET not set, skipping webhook signature check. " +
@@ -140,27 +166,31 @@ export async function verifySignature(
     );
     return true;
   }
-  if (!signatureHeader?.startsWith("sha256=")) return false;
+  if (!signatureHeader?.startsWith("sha256=")) {
+    console.error("Signature header missing or malformed");
+    return false;
+  }
+  const received = signatureHeader.slice("sha256=".length).toLowerCase();
 
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(appSecret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(rawBody),
-  );
-  const expected =
-    "sha256=" +
-    Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+  const rawHex = await hmacHex(appSecret, rawBody);
+  if (rawHex === received) return true;
 
-  // Not constant-time, but timing attacks on a webhook signature are
-  // a low-value target here. Fine for a pilot.
-  return expected === signatureHeader;
+  const escaped = escapeNonAscii(rawBody);
+  if (escaped !== rawBody && (await hmacHex(appSecret, escaped)) === received) {
+    return true;
+  }
+
+  // Diagnostics only: lengths and short prefixes, never the secret or
+  // the message content.
+  console.error(
+    "Signature mismatch",
+    JSON.stringify({
+      secretLength: appSecret.length,
+      bodyLength: rawBody.length,
+      hasNonAscii: escaped !== rawBody,
+      received: received.slice(0, 8),
+      computed: rawHex.slice(0, 8),
+    }),
+  );
+  return false;
 }
