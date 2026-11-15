@@ -3,7 +3,7 @@
 //
 // Docs: developers.facebook.com/docs/whatsapp/cloud-api/reference/messages
 
-const GRAPH_VERSION = "v21.0"; // bump this if Meta deprecates it later
+const GRAPH_VERSION = "v25.0"; // bump this if Meta deprecates it later
 
 const TOKEN = Deno.env.get("META_WHATSAPP_TOKEN") ?? "";
 const PHONE_NUMBER_ID = Deno.env.get("META_PHONE_NUMBER_ID") ?? "";
