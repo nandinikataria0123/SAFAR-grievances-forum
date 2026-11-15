@@ -76,8 +76,26 @@ async function processPayload(payload: unknown) {
   const message = value?.messages?.[0];
 
   // No "messages" array means this is a status update (sent/delivered/
-  // read) rather than an incoming message. Nothing to do.
-  if (!message) return;
+  // read/failed) rather than an incoming message. Log it, so failed
+  // deliveries show up with Meta's reason.
+  if (!message) {
+    // deno-lint-ignore no-explicit-any
+    for (const s of (value?.statuses ?? []) as any[]) {
+      console.log(
+        "Status update",
+        JSON.stringify({
+          status: s.status,
+          // deno-lint-ignore no-explicit-any
+          errors: s.errors?.map((e: any) => ({
+            code: e.code,
+            title: e.title,
+            details: e.error_data?.details,
+          })),
+        }),
+      );
+    }
+    return;
+  }
 
   const phone: string = message.from;
   const profileName: string | undefined = value?.contacts?.[0]?.profile?.name;

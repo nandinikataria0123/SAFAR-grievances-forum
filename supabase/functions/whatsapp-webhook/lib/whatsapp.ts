@@ -28,7 +28,9 @@ async function callGraphApi(body: Record<string, unknown>) {
     throw new Error(`WhatsApp send failed: ${res.status} ${errText}`);
   }
 
-  return res.json();
+  const json = await res.json();
+  console.log("WhatsApp send accepted", body.type, json?.messages?.[0]?.message_status ?? "");
+  return json;
 }
 
 export async function sendText(to: string, body: string) {
